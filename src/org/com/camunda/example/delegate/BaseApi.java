@@ -1,6 +1,9 @@
 package org.com.camunda.example.delegate;
 
+import java.io.IOException;
+import java.time.Duration;
 import java.util.logging.Logger;
+import java.util.Map;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpClient.Version;
@@ -11,7 +14,7 @@ import java.net.http.HttpResponse.BodyHandlers;
 
 public class BaseApi {
 
-    private static final Logger LOGGER = Logger.getLogger(BaseApi.class.getName());
+    private final Logger LOGGER = Logger.getLogger(BaseApi.class.getName());
     private Expression orderState;
     private Expression maxRetries;
 
@@ -21,7 +24,7 @@ public class BaseApi {
 //        String orderId = (String) execution.getVariable("orderId");
         String orderId = "myId";
         String uri = getHost() + "/api/v1/orders/" + orderId + "/state";
-        String json = "{\"orderState\" : " + orderStateValue + "}";
+        String json = "{\"orderState\" : " + "\"" + orderStateValue + "\"" + "}";
 
         int maxRetriesInt = Integer.parseInt(maxRetriesValue);
         int count = 0;
@@ -37,11 +40,11 @@ public class BaseApi {
                             + "Request path: " + uri;
                     throw new Exception(msg);
                 }
-            } catch (Exception exp) {
+            } catch (IOException | OrderStateUpdateException  exp) {
                 if (count >= maxRetriesInt) {
                     throw exp;
                 } else {
-                    count +=1 ;
+                    count += 1;
                     // exponential backoff with base 2.
                     Thread.sleep((long) Math.pow(2, count) * 1000);
                     LOGGER.warning("Retrying request on path " + uri);
@@ -70,6 +73,7 @@ public class BaseApi {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(uri))
                 .version(Version.HTTP_1_1)
+                .timeout(Duration.ofSeconds(3))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(BodyPublishers.ofString(json))
@@ -78,9 +82,18 @@ public class BaseApi {
     }
 
     private String getHost() {
+//        listEnv(); // for debugging purpose
         String host = System.getenv("API_INTERNAL_URL");
         host = host != null ? host : "http://127.0.0.1:3001/";
         host = host.endsWith("/") ? host.substring(0, host.length() - 1) : host;
         return host;
+    }
+
+    private void listEnv() {
+        Map<String, String> envMap = System.getenv();
+        for (String envName : envMap.keySet()) {
+            System.out.format("%s = %s%n", envName, envMap.get(envName));
+        }
+
     }
 }
